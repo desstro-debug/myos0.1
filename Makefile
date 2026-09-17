@@ -5,6 +5,8 @@ CFLAGS := -m32 -ffreestanding -fno-builtin -fno-stack-protector -fno-pie -O2 -Wa
 LDFLAGS := -m elf_i386 -nostdlib -T kernel/linker.ld -z noexecstack
 
 BUILD_DIR := build
+BOOT_ASM := boot/boot.asm
+BOOT_BIN := $(BUILD_DIR)/boot.bin
 KERNEL_SRCS := kernel/kernel.c kernel/terminal.c kernel/keyboard.c kernel/shell.c
 KERNEL_OBJS := $(BUILD_DIR)/kernel.o $(BUILD_DIR)/terminal.o $(BUILD_DIR)/keyboard.o $(BUILD_DIR)/shell.o
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
@@ -12,10 +14,13 @@ KERNEL_BIN := $(BUILD_DIR)/kernel.bin
 
 .PHONY: all clean
 
-all: $(KERNEL_BIN)
+all: $(BOOT_BIN) $(KERNEL_BIN)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+$(BOOT_BIN): $(BOOT_ASM) | $(BUILD_DIR)
+	nasm -f bin -o $@ $<
 
 $(BUILD_DIR)/kernel.o: kernel/kernel.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<

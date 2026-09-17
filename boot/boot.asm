@@ -16,7 +16,7 @@
 ; =============================================================================
 ; SECTION: GLOBAL CONSTANTS AND CONFIGURATION
 ; =============================================================================
-%define STAGE2_BASE_ADDR    0x00100000  ; 1MB physical address for stage2
+%define STAGE2_BASE_ADDR    0x00010000  ; 64KB physical address; fits real mode segment:offset addressing
 %define STAGE2_MAX_SIZE     0x00200000  ; 2MB maximum payload size
 %define STACK_REAL_MODE     0x00007C00  ; Stack top in real mode (below MBR)
 %define STACK_PROT_MODE     0x002F0000  ; Stack top in protected mode
@@ -65,15 +65,16 @@ mbr_entry:
 
     ; LINE 0070: Initialize stack pointer below MBR load address
     mov sp, STACK_REAL_MODE
+    mov bp, sp
 
     ; LINE 0073: Re-enable interrupts after segment setup complete
     sti
 
     ; LINE 0076: Install primary stack canary
-    mov dword [sp - 4], CANARY_MAGIC
+    mov dword [bp - 4], CANARY_MAGIC
 
     ; LINE 0079: Install secondary inverse canary for double verification
-    mov dword [sp - 8], CANARY_INVERSE
+    mov dword [bp - 8], CANARY_INVERSE
 
     ; LINE 0082: Preserve BIOS-provided boot drive number
     mov [mbr_boot_drive], dl
@@ -100,11 +101,11 @@ mbr_entry:
     jc mbr_disk_read_failed
 
     ; LINE 0105: Verify primary canary survived INT 13h call
-    cmp dword [sp - 4], CANARY_MAGIC
+    cmp dword [bp - 4], CANARY_MAGIC
     jne mbr_stack_corrupted_primary
 
     ; LINE 0109: Verify secondary inverse canary
-    cmp dword [sp - 8], CANARY_INVERSE
+    cmp dword [bp - 8], CANARY_INVERSE
     jne mbr_stack_corrupted_secondary
 
     ; LINE 0113: All validations passed, transfer to stage1
@@ -177,10 +178,11 @@ BITS 16
     mov es, ax
     mov ss, ax
     mov sp, STACK_REAL_MODE
+    mov bp, sp
 
     ; LINE 0178: Re-install dual canaries for stage1 execution context
-    mov dword [sp - 4], CANARY_MAGIC
-    mov dword [sp - 8], CANARY_INVERSE
+    mov dword [bp - 4], CANARY_MAGIC
+    mov dword [bp - 8], CANARY_INVERSE
 
     ; LINE 0182: Output stage1 initialization message
     mov si, msg_stage1_loading
@@ -199,15 +201,20 @@ BITS 16
     jne stage1_dap_buffer_mismatch
 
     ; LINE 0197: Validate LBA start address is within sane range
-    cmp qword [dap_start_lba], 0
+    cmp dword [dap_start_lba], 0
+    jne .lba_nonzero
+    cmp dword [dap_start_lba + 4], 0
     je stage1_dap_lba_zero
-    cmp qword [dap_start_lba], 1000000
+.lba_nonzero:
+    cmp dword [dap_start_lba + 4], 0
+    ja stage1_dap_lba_out_of_range
+    cmp dword [dap_start_lba], 1000000
     ja stage1_dap_lba_out_of_range
 
     ; LINE 0203: Verify canaries before destructive disk operation
-    cmp dword [sp - 4], CANARY_MAGIC
+    cmp dword [bp - 4], CANARY_MAGIC
     jne stage1_pre_read_canary_fail
-    cmp dword [sp - 8], CANARY_INVERSE
+    cmp dword [bp - 8], CANARY_INVERSE
     jne stage1_pre_read_canary_fail
 
     ; LINE 0209: Execute INT 13h AH=42h Extended Read (LBA mode)
@@ -220,15 +227,17 @@ BITS 16
     jc stage1_extended_read_failed
 
     ; LINE 0218: Post-read canary verification (primary)
-    cmp dword [sp - 4], CANARY_MAGIC
+    cmp dword [bp - 4], CANARY_MAGIC
     jne stage1_post_read_canary_fail
 
     ; LINE 0222: Post-read canary verification (secondary)
-    cmp dword [sp - 8], CANARY_INVERSE
+    cmp dword [bp - 8], CANARY_INVERSE
     jne stage1_post_read_canary_fail
 
     ; LINE 0226: Verify stage2 region is not all zeros (empty/unwritten)
-    mov eax, dword [STAGE2_BASE_ADDR]
+    mov ax, (STAGE2_BASE_ADDR >> 4)
+    mov ds, ax
+    mov eax, [0]
     test eax, eax
     jz stage2_region_empty
 
@@ -236,12 +245,15 @@ BITS 16
     cmp eax, 0xFFFFFFFF
     je stage2_region_garbage
 
+    mov ax, 0x0000
+    mov ds, ax
+
     ; LINE 0235: All stage1 validations passed
     mov si, msg_stage1_success
     call real_mode_safe_puts
 
     ; LINE 0239: Far jump to stage2 entry point
-    jmp 0x0000:(STAGE2_BASE_ADDR >> 4)
+    jmp (STAGE2_BASE_ADDR >> 4):0x0000
 
 ; -----------------------------------------------------------------------------
 ; STAGE1 ERROR HANDLERS
@@ -341,8 +353,9 @@ BITS 16
     mov sp, 0xFFFE
 
     ; LINE 0354: Install dual canaries in stage2 real-mode context
-    mov dword [sp - 4], CANARY_MAGIC
-    mov dword [sp - 8], CANARY_INVERSE
+    mov bp, sp
+    mov dword [bp - 4], CANARY_MAGIC
+    mov dword [bp - 8], CANARY_INVERSE
 
     ; LINE 0358: Initialize serial port for debug output
     call serial_port_initialize
