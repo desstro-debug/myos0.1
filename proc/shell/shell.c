@@ -2,6 +2,8 @@
 #include "terminal.h"
 #include "kernel.h"
 #include "keyboard.h"
+#include "vfs.h"
+#include "mount.h"
 
 #define MAX_INPUT 128
 #define MAX_ARGS 16
@@ -45,8 +47,12 @@ static void command_help(void) {
     terminal_write_line("  time       Display system uptime placeholder");
     terminal_write_line("  mem        Show memory summary");
     terminal_write_line("  whoami     Show current user");
+    terminal_write_line("  id         Show current UID and GID");
     terminal_write_line("  uname      Show OS information");
     terminal_write_line("  cls        Alias for clear");
+    terminal_write_line("  ls         List VFS entries");
+    terminal_write_line("  mount      Show active device mounts");
+    terminal_write_line("  umount     Unmount a device path");
 }
 
 static void command_clear(void) {
@@ -72,8 +78,38 @@ static void command_whoami(void) {
     terminal_write_line("root");
 }
 
+static void command_id(void) {
+    terminal_write_line("uid=0(root) gid=0(root)");
+}
+
 static void command_uname(void) {
-    terminal_write_line("MyOS 0.1 x86 32-bit kernel");
+    terminal_write_line("MyOS 0.1 x86_64 kernel");
+}
+
+static void command_list_fs(void) {
+    vfs_list();
+}
+
+static void command_mounts(void) {
+    mnt_list();
+}
+
+static void command_unmount(char **argv, int argc) {
+    const char *path;
+
+    if (argc != 2) {
+        terminal_write_line("usage: umount /mnt/path");
+        return;
+    }
+    path = argv[1];
+    if (*path == '/') {
+        path++;
+    }
+    if (mnt_unmount(path) == 0) {
+        terminal_write_line("device unmounted");
+    } else {
+        terminal_write_line("mount point is not active");
+    }
 }
 
 static void command_time(void) {
@@ -82,7 +118,10 @@ static void command_time(void) {
 
 static void command_reboot(void) {
     terminal_write_line("Reboot requested. Performing CPU reset...");
-    __asm__ volatile ("cli; ljmp $0xFFFF, $0x0000");
+    __asm__ volatile ("cli");
+    while ((inb(0x64) & 0x02) != 0) {
+    }
+    outb(0x64, 0xFE);
     for (;;) {
         __asm__ volatile("hlt");
     }
@@ -107,8 +146,16 @@ static void execute_command(char *input) {
         command_mem();
     } else if (strcmp(argv[0], "whoami") == 0) {
         command_whoami();
+    } else if (strcmp(argv[0], "id") == 0) {
+        command_id();
     } else if (strcmp(argv[0], "uname") == 0) {
         command_uname();
+    } else if (strcmp(argv[0], "ls") == 0) {
+        command_list_fs();
+    } else if (strcmp(argv[0], "mount") == 0) {
+        command_mounts();
+    } else if (strcmp(argv[0], "umount") == 0) {
+        command_unmount(argv, argc);
     } else if (strcmp(argv[0], "time") == 0) {
         command_time();
     } else if (strcmp(argv[0], "reboot") == 0) {

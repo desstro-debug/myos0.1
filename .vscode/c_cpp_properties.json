@@ -1,0 +1,26 @@
+{
+    "configurations": [
+        {
+            "name": "MyOS x86_64 UEFI",
+            "compilerPath": "/usr/bin/clang",
+            "includePath": [
+                "${workspaceFolder}/build",
+                "${workspaceFolder}/uefi",
+                "${workspaceFolder}/proc/kernel",
+                "${workspaceFolder}/proc/terminal",
+                "${workspaceFolder}/proc/keyboard",
+                "${workspaceFolder}/proc/shell",
+                "${workspaceFolder}/lib",
+                "${workspaceFolder}/fs",
+                "${workspaceFolder}/mnt",
+                "${workspaceFolder}/drivers"
+            ],
+            "defines": [
+                "MYOS_UEFI_X86_64=1"
+            ],
+            "cStandard": "c11",
+            "intelliSenseMode": "linux-clang-x64"
+        }
+    ],
+    "version": 4
+}

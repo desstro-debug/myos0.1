@@ -2,7 +2,7 @@
 
 #define VGA_WIDTH 80U
 #define VGA_HEIGHT 25U
-#define VGA_MEMORY 0x000B8000U
+#define VGA_MEMORY 0x000B8000ULL
 #define TAB_WIDTH 4U
 
 static volatile u16 *const vga = (volatile u16 *)VGA_MEMORY;

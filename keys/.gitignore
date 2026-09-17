@@ -1,0 +1,6 @@
+*.key
+*.pem
+*.p12
+*.auth
+*.esl
+!README.md
